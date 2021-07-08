@@ -97,6 +97,8 @@ func readFieldValToKV(v *reflect.Value, tg tags, kv url.Values, keyPrefix string
 	omitempty := tg.Has("omitempty")
 	isSliceOrArray := false
 
+	// fmt.Printf("%s.%s - kind: %v\n", keyPrefix, tg.Name(), v.Type().Kind())
+
 	switch v.Type().Kind() {
 	default:
 		omitempty = true
@@ -148,6 +150,21 @@ func readFieldValToKV(v *reflect.Value, tg tags, kv url.Values, keyPrefix string
 			readFieldToKV(&fv, &ft, kv, key)
 		}
 		return // 不再往下走，而是由被递归的函数来完成 kv.Set
+
+	case reflect.Map:
+		if v.Type().Key().Kind() != reflect.String {
+			return // 不支持，直接跳过
+		}
+
+		keys := v.MapKeys()
+		for _, k := range keys {
+			subV := v.MapIndex(k)
+			if subV.Kind() == reflect.Interface {
+				subV = reflect.ValueOf(subV.Interface())
+			}
+			readFieldValToKV(&subV, tags{k.String()}, kv, key)
+		}
+		return
 	}
 
 	// 数组使用 Add 函数

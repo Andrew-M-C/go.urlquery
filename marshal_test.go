@@ -227,3 +227,37 @@ func testMarshalStructInStruct(t *testing.T) {
 	_, exist := kv["nil_ptr"]
 	So(exist, ShouldBeFalse)
 }
+
+func testMarshalMapInStruct(t *testing.T) {
+	type thing struct {
+		Intf   map[string]interface{} `url:"intf"`
+		String map[string]string      `url:"string"`
+	}
+
+	th := &thing{
+		Intf: map[string]interface{}{
+			"string": "a string",
+			"int":    12345,
+			"bool":   true,
+			"ints":   []int{2, 4, 6, 8, 10},
+		},
+		String: map[string]string{
+			"A": "alpha",
+			"B": "bravo",
+			"C": "charlie",
+		},
+	}
+
+	kv, err := marshalToValues(th)
+	So(err, ShouldBeNil)
+
+	t.Logf("result: %s", kv.Encode())
+
+	So(kv.Get("intf.string"), ShouldEqual, th.Intf["string"])
+	So(kv.Get("intf.int"), ShouldEqual, fmt.Sprint(th.Intf["int"]))
+	So(kv.Get("intf.bool"), ShouldEqual, fmt.Sprint(th.Intf["bool"]))
+
+	So(kv.Get("string.A"), ShouldEqual, th.String["A"])
+	So(kv.Get("string.B"), ShouldEqual, th.String["B"])
+	So(kv.Get("string.C"), ShouldEqual, th.String["C"])
+}
