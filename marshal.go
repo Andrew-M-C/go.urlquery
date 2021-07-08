@@ -25,32 +25,34 @@ func marshalToValues(in interface{}) (kv url.Values, err error) {
 		fv := v.Field(i) // field value
 		ft := t.Field(i) // field type
 
-		if ft.Anonymous {
-			// TODO: 后文再处理
-			continue
-		}
-		if !fv.CanInterface() {
-			continue
-		}
-
-		tg := readTag(&ft, "url")
-		if tg.Name() == "-" {
-			continue
-		}
-
-		str, ok := readFieldVal(&fv, tg)
-		if !ok {
-			continue
-		}
-		if str == "" && tg.Has("omitempty") {
-			continue
-		}
-
-		// 写 KV 值
-		kv.Set(tg.Name(), str)
+		readFieldToKV(&fv, &ft, kv)
 	}
 
 	return kv, nil
+}
+
+func readFieldToKV(fv *reflect.Value, ft *reflect.StructField, kv url.Values) {
+	if ft.Anonymous {
+		numField := fv.NumField()
+		for i := 0; i < numField; i++ {
+			ffv := fv.Field(i)
+			fft := ft.Type.Field(i)
+
+			readFieldToKV(&ffv, &fft, kv)
+		}
+		return
+	}
+	if !fv.CanInterface() {
+		return
+	}
+
+	tg := readTag(ft, "url")
+	if tg.Name() == "-" {
+		return
+	}
+
+	// 写 KV 值
+	readFieldValToKV(fv, tg, kv)
 }
 
 func validateMarshalParam(in interface{}) (v reflect.Value, err error) {
@@ -84,21 +86,121 @@ func validateMarshalParam(in interface{}) (v reflect.Value, err error) {
 	return
 }
 
-func readFieldVal(v *reflect.Value, tag tags) (s string, ok bool) {
+func readFieldValToKV(v *reflect.Value, tg tags, kv url.Values) {
+	key := tg.Name()
+	val := ""
+	var vals []string
+	omitempty := tg.Has("omitempty")
+	isSliceOrArray := false
+
 	switch v.Type().Kind() {
 	default:
-		return "", false
+		omitempty = true
 	case reflect.String:
-		return v.String(), true
+		val = v.String()
 	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
-		return strconv.FormatInt(v.Int(), 10), true
+		val = strconv.FormatInt(v.Int(), 10)
 	case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
-		return strconv.FormatUint(v.Uint(), 10), true
+		val = strconv.FormatUint(v.Uint(), 10)
 	case reflect.Bool:
-		return fmt.Sprintf("%v", v.Bool()), true
+		val = fmt.Sprintf("%v", v.Bool())
 	case reflect.Float64, reflect.Float32:
-		return strconv.FormatFloat(v.Float(), 'f', -1, 64), true
+		val = strconv.FormatFloat(v.Float(), 'f', -1, 64)
+
+	case reflect.Slice, reflect.Array:
+		isSliceOrArray = true
+		elemTy := v.Type().Elem()
+		switch elemTy.Kind() {
+		default:
+			// 什么也不做，omitempty 对数组而言没有意义
+		case reflect.String:
+			vals = readStringArray(v)
+		case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
+			vals = readIntArray(v)
+		case reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8:
+			vals = readUintArray(v)
+		case reflect.Bool:
+			vals = readBoolArray(v)
+		case reflect.Float64, reflect.Float32:
+			vals = readFloatArray(v)
+		}
 	}
+
+	// 数组使用 Add 函数
+	if isSliceOrArray {
+		for _, v := range vals {
+			kv.Add(key, v)
+		}
+		return
+	}
+
+	if val == "" && omitempty {
+		return
+	}
+	kv.Set(key, val)
+}
+
+func readStringArray(v *reflect.Value) (vals []string) {
+	count := v.Len()
+
+	for i := 0; i < count; i++ {
+		child := v.Index(i)
+		s := child.String()
+		vals = append(vals, s)
+	}
+
+	return
+}
+
+func readIntArray(v *reflect.Value) (vals []string) {
+	count := v.Len()
+
+	for i := 0; i < count; i++ {
+		child := v.Index(i)
+		v := child.Int()
+		vals = append(vals, strconv.FormatInt(v, 10))
+	}
+
+	return
+}
+
+func readUintArray(v *reflect.Value) (vals []string) {
+	count := v.Len()
+
+	for i := 0; i < count; i++ {
+		child := v.Index(i)
+		v := child.Uint()
+		vals = append(vals, strconv.FormatUint(v, 10))
+	}
+
+	return
+}
+
+func readBoolArray(v *reflect.Value) (vals []string) {
+	count := v.Len()
+
+	for i := 0; i < count; i++ {
+		child := v.Index(i)
+		if child.Bool() {
+			vals = append(vals, "true")
+		} else {
+			vals = append(vals, "false")
+		}
+	}
+
+	return
+}
+
+func readFloatArray(v *reflect.Value) (vals []string) {
+	count := v.Len()
+
+	for i := 0; i < count; i++ {
+		child := v.Index(i)
+		v := child.Float()
+		vals = append(vals, strconv.FormatFloat(v, 'f', -1, 64))
+	}
+
+	return
 }
 
 type tags []string

@@ -18,4 +18,5 @@ func test(t *testing.T, scene string, f func(*testing.T)) {
 func TestSlice(t *testing.T) {
 	test(t, "marshalToValues", testMarshalToValues)
 	test(t, "Marshal", testMarshal)
+	test(t, "Marshal slice", testMarshalSlice)
 }
