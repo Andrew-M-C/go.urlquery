@@ -19,4 +19,5 @@ func TestSlice(t *testing.T) {
 	test(t, "marshalToValues", testMarshalToValues)
 	test(t, "Marshal", testMarshal)
 	test(t, "Marshal slice", testMarshalSlice)
+	test(t, "Marshal struct in struct", testMarshalStructInStruct)
 }

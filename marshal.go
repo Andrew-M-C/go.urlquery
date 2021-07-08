@@ -25,20 +25,20 @@ func marshalToValues(in interface{}) (kv url.Values, err error) {
 		fv := v.Field(i) // field value
 		ft := t.Field(i) // field type
 
-		readFieldToKV(&fv, &ft, kv)
+		readFieldToKV(&fv, &ft, kv, "")
 	}
 
 	return kv, nil
 }
 
-func readFieldToKV(fv *reflect.Value, ft *reflect.StructField, kv url.Values) {
+func readFieldToKV(fv *reflect.Value, ft *reflect.StructField, kv url.Values, keyPrefix string) {
 	if ft.Anonymous {
 		numField := fv.NumField()
 		for i := 0; i < numField; i++ {
 			ffv := fv.Field(i)
 			fft := ft.Type.Field(i)
 
-			readFieldToKV(&ffv, &fft, kv)
+			readFieldToKV(&ffv, &fft, kv, keyPrefix)
 		}
 		return
 	}
@@ -52,7 +52,7 @@ func readFieldToKV(fv *reflect.Value, ft *reflect.StructField, kv url.Values) {
 	}
 
 	// 写 KV 值
-	readFieldValToKV(fv, tg, kv)
+	readFieldValToKV(fv, tg, kv, keyPrefix)
 }
 
 func validateMarshalParam(in interface{}) (v reflect.Value, err error) {
@@ -86,8 +86,12 @@ func validateMarshalParam(in interface{}) (v reflect.Value, err error) {
 	return
 }
 
-func readFieldValToKV(v *reflect.Value, tg tags, kv url.Values) {
+func readFieldValToKV(v *reflect.Value, tg tags, kv url.Values, keyPrefix string) {
 	key := tg.Name()
+	if keyPrefix != "" {
+		key = keyPrefix + "." + key
+	}
+
 	val := ""
 	var vals []string
 	omitempty := tg.Has("omitempty")
@@ -124,6 +128,26 @@ func readFieldValToKV(v *reflect.Value, tg tags, kv url.Values) {
 		case reflect.Float64, reflect.Float32:
 			vals = readFloatArray(v)
 		}
+
+	case reflect.Ptr:
+		if v.IsNil() {
+			return
+		}
+		elem := v.Elem()
+		v = &elem
+		fallthrough
+
+	case reflect.Struct:
+		t := v.Type()
+		numField := t.NumField()
+
+		for i := 0; i < numField; i++ {
+			fv := v.Field(i) // field value
+			ft := t.Field(i) // field type
+
+			readFieldToKV(&fv, &ft, kv, key)
+		}
+		return // 不再往下走，而是由被递归的函数来完成 kv.Set
 	}
 
 	// 数组使用 Add 函数

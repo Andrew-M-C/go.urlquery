@@ -175,5 +175,55 @@ func testMarshalSlice(t *testing.T) {
 
 	_, exist := kv["empty"]
 	So(exist, ShouldBeFalse)
+}
 
+func testMarshalStructInStruct(t *testing.T) {
+	type sub struct {
+		String string `url:"string"`
+		Ints   []int  `url:"ints"`
+	}
+	type thing struct {
+		Sub    sub  `url:"sub"`
+		SubPtr *sub `url:"sub_ptr"`
+		NilPtr *sub `url:"nil_ptr"`
+	}
+
+	th := &thing{
+		Sub: sub{
+			String: "string in sub",
+			Ints:   []int{1, 3, 5, 7, 9},
+		},
+		SubPtr: &sub{
+			String: "string in sub ptr",
+			Ints:   []int{2, 4, 6, 8},
+		},
+		NilPtr: nil,
+	}
+
+	kv, err := marshalToValues(th)
+	So(err, ShouldBeNil)
+
+	t.Logf("result: %s", kv.Encode())
+
+	// sub.xxx
+	So(kv.Get("sub.string"), ShouldEqual, th.Sub.String)
+
+	subInts := kv["sub.ints"]
+	So(len(subInts), ShouldEqual, len(th.Sub.Ints))
+	for i, s := range subInts {
+		So(s, ShouldEqual, fmt.Sprint(th.Sub.Ints[i]))
+	}
+
+	// sub_ptr.xxx
+	So(kv.Get("sub_ptr.string"), ShouldEqual, th.SubPtr.String)
+
+	subPtrInts := kv["sub_ptr.ints"]
+	So(len(subPtrInts), ShouldEqual, len(th.SubPtr.Ints))
+	for i, s := range subPtrInts {
+		So(s, ShouldEqual, fmt.Sprint(th.SubPtr.Ints[i]))
+	}
+
+	// nil_ptr.xxx
+	_, exist := kv["nil_ptr"]
+	So(exist, ShouldBeFalse)
 }
